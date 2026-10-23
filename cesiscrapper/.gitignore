@@ -1,0 +1,22 @@
+# Secrets locaux
+.env
+.env.*
+cookies.json
+
+# Données téléchargées / cache du worker
+downloads/
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Divers
+.vscode/
+*.log

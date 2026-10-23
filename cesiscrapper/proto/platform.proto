@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package warmplatform;
+
+// One bidirectional stream stays open while the developer's container is warm.
+// Host -> container: Invocation, HostResponse
+// Container -> host: Hello, InvocationResult, HostRequest
+service ContainerGateway {
+  rpc Connect(stream Envelope) returns (stream Envelope);
+}
+
+message Envelope {
+  oneof message {
+    Hello hello = 1;
+    Invocation invocation = 2;
+    InvocationResult invocation_result = 3;
+    HostRequest host_request = 4;
+    HostResponse host_response = 5;
+  }
+}
+
+message ExposedFunction {
+  string name = 1;
+  reserved 2;
+  string description = 3;
+  string input_schema_json = 4;
+  string output_schema_json = 5;
+  bool is_test = 6;
+}
+
+message Hello {
+  string worker_id = 1;
+  string api_key = 2;
+  repeated ExposedFunction functions = 3;
+}
+
+message Invocation {
+  string request_id = 1;
+  string function_name = 2;
+  string input_json = 3;
+}
+
+message InvocationResult {
+  string request_id = 1;
+  string output_json = 2;
+  string error = 3;
+}
+
+message HostRequest {
+  string request_id = 1;
+  string kind = 2;
+  string payload_json = 3;
+}
+
+message HostResponse {
+  string request_id = 1;
+  string payload_json = 2;
+  string error = 3;
+}

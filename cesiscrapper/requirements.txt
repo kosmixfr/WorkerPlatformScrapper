@@ -1,0 +1,14 @@
+# Runtime gRPC (stubs générés avec grpcio-tools 1.84.1 / protobuf 7.35.1)
+grpcio==1.84.1
+protobuf==7.36.2
+
+# Scraping / navigateur (mêmes versions que l'environnement de développement validé).
+# L'extra [fetchers] est OBLIGATOIRE : il apporte curl_cffi, browserforge,
+# patchright, playwright, msgspec, etc. utilisés par scrapling.fetchers.
+scrapling[fetchers]==0.5
+patchright==1.64.1
+playwright==1.64.0
+
+# Configuration locale et validation des schémas
+python-dotenv>=1.0,<2
+jsonschema>=4.23,<5

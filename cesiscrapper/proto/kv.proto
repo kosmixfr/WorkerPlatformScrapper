@@ -1,0 +1,218 @@
+syntax = "proto3";
+
+package warmplatform.kv;
+
+// Service KV exposé par le KV daemon.
+//
+// Le daemon est le SEUL composant autorisé à toucher les données KV (tables
+// `kv_items`). Les containers utilisateur ne se connectent JAMAIS à MySQL :
+// ils parlent gRPC au daemon via le Unix Domain Socket (`/var/run/platform/kv.sock`).
+//
+// Authentification :
+//   - Container (run) :  metadata `authorization: Bearer <run_token>`
+//   - Hôte / panel    :  metadata `authorization: Bearer <service_token>`
+//                        + metadata `x-kv-user-id: <userId>`
+//
+// L'identité réelle du store (id, run, permissions) est TOUJOURS déterminée par
+// le serveur. Un container ne fournit jamais de `store_id`/`run_id` : le champ
+// `store` des requêtes est soit vide (Default KV de la Run) soit un NOM de
+// Named KV Store résolu côté serveur avec vérification des permissions.
+service KvDaemon {
+  rpc Get(GetRequest) returns (GetResponse);
+  rpc Set(SetRequest) returns (SetResponse);
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+  rpc Exists(ExistsRequest) returns (ExistsResponse);
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
+  rpc Flush(FlushRequest) returns (FlushResponse);
+  // Lecture/écriture en streaming pour les gros objets (au-delà de la taille
+  // d'un message gRPC unique). GetStream renvoie la valeur en morceaux ;
+  // SetStream reçoit la valeur en morceaux du client. Le daemon NE JAMAIS
+  // assemble la valeur en mémoire : SetStream pousse directement en S3 via un
+  // upload multipart (abort en cas d'échec), GetStream lit S3 morceau par
+  // morceau — les mêmes limites que Set/Get s'appliquent (KV_MAX_VALUE_BYTES,
+  // déport S3 au-delà de KV_INLINE_LIMIT, clés générées côté serveur).
+  rpc GetStream(GetStreamRequest) returns (stream GetStreamResponse);
+  rpc SetStream(stream SetStreamRequest) returns (SetStreamResponse);
+  // Gestion des Named KV Stores depuis le code utilisateur.
+  rpc StoreCreate(StoreCreateRequest) returns (StoreCreateResponse);
+  rpc StoreList(StoreListRequest) returns (StoreListResponse);
+  // URL publique signée : renvoie une URL permettant de LIRE la valeur sans
+  // authentification (jeton HMAC contenant store_id, key, user_id, expiration).
+  // Utile pour partager une image / un fichier produit par un worker.
+  rpc PublicUrl(PublicUrlRequest) returns (PublicUrlResponse);
+  // Service level : utilisé par le panel (hôte) avec le service token.
+  rpc ServiceListItems(ServiceListItemsRequest) returns (ServiceListItemsResponse);
+  rpc ServiceGetItem(ServiceGetItemRequest) returns (ServiceGetItemResponse);
+  rpc ServiceDeleteItem(ServiceDeleteItemRequest) returns (ServiceDeleteItemResponse);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message GetRequest {
+  string store = 1;   // "" = Default KV de la Run ; sinon nom d'un Named KV Store
+  string key = 2;
+}
+message GetResponse {
+  bool found = 1;
+  bytes value = 2;
+  string content_type = 3;
+  int64 size = 4;
+  string error = 5;
+}
+
+message SetRequest {
+  string store = 1;   // "" = Default KV de la Run ; sinon nom d'un Named KV Store
+  string key = 2;
+  bytes value = 3;
+  string content_type = 4;
+}
+message SetResponse {
+  bool ok = 1;
+  string error = 2;
+}
+
+message GetStreamRequest {
+  string store = 1;   // "" = Default KV de la Run ; sinon nom d'un Named KV Store
+  string key = 2;
+}
+message GetStreamResponse {
+  bool found = 1;
+  string content_type = 2;
+  int64 size = 3;           // taille totale de la valeur
+  string storage_type = 4;  // "mysql" | "s3"
+  bytes data = 5;           // morceau de la valeur (vide sur le premier message si not found)
+  bool last = 6;            // dernier morceau
+  string error = 7;
+}
+
+message SetStreamRequest {
+  string store = 1;   // "" = Default KV de la Run ; sinon nom d'un Named KV Store
+  string key = 2;
+  bytes data = 3;           // morceau de la valeur
+  string content_type = 4;  // renseigné sur chaque morceau (le serveur garde le premier non vide)
+  bool last = 5;            // dernier morceau (doit être envoyé exactement une fois)
+  int64 total_size = 6;     // taille totale annoncée au premier morceau
+}
+message SetStreamResponse {
+  bool ok = 1;
+  string error = 2;
+}
+
+message DeleteRequest {
+  string store = 1;
+  string key = 2;
+}
+message DeleteResponse {
+  bool ok = 1;
+  bool deleted = 2;   // false si la clé n'existait pas
+  string error = 3;
+}
+
+message ExistsRequest {
+  string store = 1;
+  string key = 2;
+}
+message ExistsResponse {
+  bool found = 1;
+  string error = 2;
+}
+
+message ListKeysRequest {
+  string store = 1;
+  string prefix = 2;
+  string cursor = 3;   // curseur opaque renvoyé par la page précédente
+  int32 limit = 4;     // défaut 100, max 1000
+}
+message KeyInfo {
+  string key = 1;
+  int64 size = 2;
+  string content_type = 3;
+  string updated_at = 4;
+}
+message ListKeysResponse {
+  repeated KeyInfo items = 1;
+  string next_cursor = 2;  // "" = dernière page
+  string error = 3;
+}
+
+message FlushRequest {}
+message FlushResponse {
+  bool ok = 1;
+  string error = 2;
+}
+
+message StoreCreateRequest {
+  string name = 1;   // nom du Named KV Store (validé serveur)
+}
+message StoreCreateResponse {
+  string store_id = 1;
+  string error = 2;
+}
+
+message StoreListRequest {}
+message StoreInfo {
+  string id = 1;
+  string name = 2;
+  string type = 3;   // "default" | "named"
+}
+message StoreListResponse {
+  repeated StoreInfo stores = 1;
+  string error = 2;
+}
+
+message PublicUrlRequest {
+  string store = 1;          // "" = Default KV de la Run ; sinon nom d'un Named KV Store
+  string key = 2;
+  int32 expires_in = 3;      // durée de validité en secondes (défaut 3600, max 30 jours)
+}
+message PublicUrlResponse {
+  string url = 1;            // URL publique signée (GET /v1/public/kv/:token)
+  string expires_at = 2;     // date d'expiration ISO 8601
+  string error = 3;
+}
+
+// --- Service level (panel/hôte, service token) ---
+
+message ServiceListItemsRequest {
+  string user_id = 1;
+  string store_id = 2;
+  string prefix = 3;
+  string cursor = 4;
+  int32 limit = 5;
+}
+message ServiceListItemsResponse {
+  repeated KeyInfo items = 1;
+  string next_cursor = 2;
+  string error = 3;
+}
+
+message ServiceGetItemRequest {
+  string user_id = 1;
+  string store_id = 2;
+  string key = 3;
+}
+message ServiceGetItemResponse {
+  bool found = 1;
+  bytes value = 2;
+  string content_type = 3;
+  int64 size = 4;
+  string storage_type = 5;   // "mysql" | "s3"
+  string error = 6;
+}
+
+message ServiceDeleteItemRequest {
+  string user_id = 1;
+  string store_id = 2;
+  string key = 3;
+}
+message ServiceDeleteItemResponse {
+  bool ok = 1;
+  bool deleted = 2;
+  string error = 3;
+}
+
+message HealthRequest {}
+message HealthResponse {
+  bool ok = 1;
+  string version = 2;
+  map<string, int64> stats = 3;
+}
