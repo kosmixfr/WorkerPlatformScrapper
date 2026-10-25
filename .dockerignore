@@ -1,0 +1,29 @@
+# Ce fichier s'applique au contexte de build = RACINE du dépôt.
+# Il évite d'envoyer au daemon Docker les secrets, caches et données locales.
+#
+# Les mêmes exclusions existent dans cesiscrapper/.dockerignore pour les builds
+# dont le contexte est directement le dossier cesiscrapper/.
+
+# Secrets et artefacts locaux : ne JAMAIS les envoyer au daemon Docker.
+**/.env
+**/.env.*
+**/cookies.json
+**/downloads/
+**/data/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Divers
+.git/
+.gitignore
+.gitattributes
+.vscode/
+**/*.log

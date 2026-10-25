@@ -1,0 +1,14 @@
+# Normalisation des fins de ligne.
+#
+# Les scripts shell (build-worker.sh) et le Dockerfile doivent rester en LF,
+# même sur un checkout Windows avec core.autocrlf=true, sinon le build échoue
+# sous Linux/macOS/CI (`bash\r: command not found`, chemins Dockerfile invalides).
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+*.py text eol=lf
+*.proto text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.ps1 text eol=crlf

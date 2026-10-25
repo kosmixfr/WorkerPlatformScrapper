@@ -132,17 +132,29 @@ lance les conteneurs à la demande via Dockerode. Construisez l'image une fois :
 # Windows
 .\build-worker.ps1
 .\build-worker.ps1 -Tag v1.0.0
+.\build-worker.ps1 -NoCache
 ```
 
 ```bash
 # Linux / macOS / CI
 ./build-worker.sh
 ./build-worker.sh v1.0.0
+./build-worker.sh v1.0.0 --no-cache
+```
+
+Ou directement depuis la **racine du dépôt** (le Dockerfile reste dans
+`cesiscrapper/`) :
+
+```bash
+docker build -f cesiscrapper/Dockerfile -t warm-cesi-worker:latest .
 ```
 
 L'image produite est `warm-cesi-worker:latest`. Le contexte de build est la
-racine de ce projet ; `.env`, `cookies.json` et `downloads/` sont exclus par
-`.dockerignore`.
+**racine du dépôt** ; `.env`, `cookies.json` et `downloads/` sont exclus par le
+`.dockerignore` racine.
+
+> Le Dockerfile accepte aussi un build dont le contexte est directement
+> `cesiscrapper/` : ajoutez `--build-arg PROJECT_DIR=.`.
 
 > L'image doit être visible par le daemon Docker de la machine qui héberge
 > PlatformScrapper. Sur Windows avec Bun, pensez à activer
@@ -279,9 +291,16 @@ cesiscrapper/
   proto/
     platform.proto            # contrat copié depuis PlatformScrapper
     kv.proto                  # contrat KV copié depuis PlatformScrapper
-  Dockerfile
+  Dockerfile                  # build avec contexte = racine du dépôt
   requirements.txt
-  build-worker.ps1 / .sh
+  build-worker.ps1 / .sh      # contextes racine gérés automatiquement
+```
+
+À la racine du dépôt :
+
+```text
+.dockerignore                 # exclusions du contexte racine
+.gitattributes                # LF forcé pour Dockerfile / *.sh
 ```
 
 ## Limites connues
